@@ -1,0 +1,125 @@
+/*
+ Arduino Starter Kit example
+ Project 5  - Servo Mood Indicator
+
+ This sketch is written to accompany Project 5 in the
+ Arduino Starter Kit
+
+ Parts required:
+ servo motor
+ 10 kilohm potentiometer
+ 2 100 uF electrolytic capacitors
+
+ http://www.arduino.cc/starterKit
+*/
+
+// include the servo library
+#include <Servo.h>
+#include <MotorControl.h>
+
+Servo myServo;   // create servo object to control a servo 
+                 // twelve servo objects can be created on most boards
+MotorControl motor1(10,11,1,'H');   //left motor
+MotorControl motor2(2,3,0,'H');   //right motor
+ 
+int pos=37;   // servo center position 
+
+int x=35;   // left motor speed
+int y=64;   // right motor speed
+//motor speed different: L+29=R
+
+int Sensor1=8;
+int Sensor2=7;
+int Sensor3=6;
+int Sensor4=5;
+
+int S1=0;
+int S2=0;
+int S3=0;
+int S4=0;
+
+void setup()
+{
+  myServo.attach(9);   // attaches the servo on pin 9 to the servo object
+  
+  pinMode(Sensor1,INPUT);
+  pinMode(Sensor2,INPUT);
+  pinMode(Sensor3,INPUT);
+  pinMode(Sensor4,INPUT);
+  
+  Serial.begin(9600);   // open a serial connection to your computer
+}
+
+void loop()
+{
+ 
+  //servo motor alignment (test the angle)
+  //myServo.write(37);   // tell servo to go to position in variable 'pos' 
+  //delay(500);
+  //4=most left
+  //37=center point
+  //70=most right
+
+  //motor alignment
+  //myServo.write(37);
+  //motor1.speed(15);
+  //motor2.speed(44);
+  //motor speed different: L+29=R
+
+  S1=digitalRead(Sensor1);
+  S2=digitalRead(Sensor2);
+  S3=digitalRead(Sensor3);
+  S4=digitalRead(Sensor4);
+
+//1101X - move straight
+  if(S1==HIGH&&S2==HIGH&&S3==LOW&&S4==HIGH){
+    myServo.write(pos);
+    motor1.speed(x);
+    motor2.speed(y);
+  }
+
+//1011X - turn slightly left
+  else if(S1==HIGH&&S2==LOW&&S3==HIGH&&S4==HIGH){
+    myServo.write(pos-20);
+    motor1.speed(x);
+    motor2.speed(y);
+  }
+
+//0111X - turn hard left
+  else if(S1==LOW&&S2==HIGH&&S3==HIGH&&S4==HIGH){  
+    myServo.write(pos-30);
+    motor1.speed(x);
+    motor2.speed(y);
+  }
+
+//1110X - turn slightly right
+  else if(S1==HIGH&&S2==HIGH&&S3==HIGH&&S4==LOW){
+    myServo.write(pos+20);
+    motor1.speed(x);
+    motor2.speed(y);
+  }
+
+//sensor5 broken already, no 11110, no turn hard right
+
+//0000X all black - shadow
+  else if(S1==LOW&&S2==LOW&&S3==LOW&&S4==LOW){
+    myServo.write(pos);
+    motor1.speed(x);
+    motor2.speed(y);
+  }
+
+//1111X all white - out of the track, move backward
+  else if(S1==HIGH&&S2==HIGH&&S3==HIGH&&S4==HIGH){
+     myServo.write(pos);
+     motor1.speed(-15);
+     motor2.speed(-44);
+}
+
+  delay(500);
+/*
+  Serial.print(S1);
+  Serial.print(S2);
+  Serial.print(S3);
+  Serial.println(S4);
+*/
+}

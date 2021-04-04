@@ -1,0 +1,208 @@
+/*
+LineScanCamera display digitized reading to serial
+
+The methods are: 
+ LineScanCamera - Class for manipulating LineScanCamera connected to Arduino pins. 
+ LineScanCamera anyname (SIpin, CLKpin, ANpin, Exposetime in us)
+ read()      - Gets the analog value of each pixel. return int*
+*/
+
+#include <LineScanCamera.h>
+#include <MotorControl.h>
+
+
+MotorControl motor1(3,5,1,'H'); // pin1 pin2 direction//either 1 or 2 /High
+MotorControl motor2(6,9,1,'H');
+LineScanCamera myCam1(A1,A2,A0,7390); //analog1/analog2/analog3/transfer rate
+
+int* value;
+int digitizedvalue[128];
+int ecoe[128];
+int thres=30; //depends on the ambient light,above this value, means it will be white
+
+int leftc = 0;
+int rightc =0;
+
+double error =0;
+double prev_e =0;
+
+
+double kp= 1.5;
+double ki=0;
+double kd= 0.4; 
+double p=0; 
+double i=0; 
+double d=0; 
+
+double pid =0;
+
+int bsp = 80;
+
+double convert1 ; //motor speed 1
+  double convert2 ; //motor speed 2
+
+void setup()
+{
+    Serial.begin(9600);
+   int l =20; //the reduction of view 
+    //assign a coeficient for each pixel
+  for (int k = -43; k <= 44; k++) //k is position/pixel
+//  one side got 64 ge position inside, -63, 0, 64, now want narrow down the vision by 20 from left n right , so -43 0 43
+  {
+    l=k+64; //b4 that got j, this is k the -64 -63 bla bla, if narrowed out, 1st sensor sensed is -64 =20 but the position is -44
+    ecoe[l] = k; //change 0 1 2 3 4 to -2 -1 0 1 2 error coeeficient
+  
+
+       
+  }
+}
+
+void cameraread (){
+   
+    value=myCam1.read();
+
+
+//digitize the data based on threshold 
+    for (int j = 20; j < 107; j++)
+    {
+      if (value[j]<thres) {digitizedvalue[j]=1;} //in graph, above less than this threshold value is black 
+      else {digitizedvalue[j]=0;} //black// if enviromental light bright /threshold hav to be higher //1 is black
+    }
+
+//display the digitized data to serial
+    for (int j = 20; j <= 107; j++) //for one pixel to reach centre line that is black, need to pass by many pixels
+    {
+      Serial.print(digitizedvalue[j]);
+    }
+   Serial.print("\n");
+}
+
+
+void pid_v (){
+
+  p = error;
+  i = i + error;
+  d = error - prev_e;
+
+  pid = (kp*p) + (ki*i) + (kd * d);
+
+prev_e = error;
+  
+}
+
+
+void errorcal (){
+  
+int cal =0;
+int readj=0;
+int pixerror =0;
+int errorlength =0;
+int dummy =0;
+int totalerror =0;
+
+
+
+
+ //determined the posotion where "1" occurs     
+   for (int j = 20; j <= 107; j++) 
+    {     
+      cal = cal + digitizedvalue[j]; //one variable will be read position of camera the other one is calculate 
+	  //if black line centre, until 1 at centre oni got value
+      readj = j;
+          if (cal >= 1)  //digitizedvalue[j]is pixel or position of 1st black line meet from left graph
+          {
+            break; //stop
+          }          
+
+   
+
+    }
+
+  
+
+ for (int j = readj+1; j <= 107; j++) // calculate length of "1"
+   {     
+      if (j + digitizedvalue[j] == j)  //for example,position 64, start the 1st bacl line *detect error = digitalized j
+          //if got threee like 111 then is 64+65+66  then if sense back white, then imposible get back 64 bcz its zero back
+		  {  
+            break;
+          }
+            errorlength =errorlength + 1;   //total of width of black line
+      
+    }
+      
+
+
+   for (int j = 10; j <= 118; j++)
+   {
+      pixerror = digitizedvalue[j] * ecoe[j];     //digitizedvalue[j] = position    
+	                                              //ecoe=error coeeficeint =error position from 1st error detect 2nd line of black, is 66= ecoe is 2
+      totalerror = pixerror + totalerror;
+
+
+   }
+
+
+if (errorlength ==0)
+{
+  errorlength = 1;
+}
+
+error = totalerror / errorlength;
+
+  Serial.print (error);
+ Serial.print ("\n");
+
+}
+  
+void motorrun (){
+
+convert1 = bsp + pid;  //speed of motor1 /use other vafiable so that no conflict n double value
+ convert2 = (bsp - pid);  //speed of motor2
+
+  if (convert1 > 255)
+  {
+    convert1 = 255; //if base speed ald 200 then total speed after calculate pid is 300, then it will contrain them to 255 so motor can read
+  }
+
+  if (convert1 <-255)
+  {
+    convert1 =-255;
+  }
+   if (convert2 > 255)
+  {
+    convert2 = 255;
+  }
+
+  if (convert2 <-255)
+  {
+    convert2 =-255;
+  }
+  motor1.speed (convert1);
+  motor2.speed (convert2);
+ 
+
+  
+}
+
+void loop()
+{
+    cameraread ();
+   errorcal ();//calculate error
+ pid_v();
+
+ //Serial.println(pid);
+ motorrun();
+
+ //Serial.println (convert1);
+ //Serial.println(convert2);
+   // delay (100);
+
+}
+// problem : error vslue wrong
+
+//ir sensor set yhe position of error min error -40 max 40
+//all array times coeffiecient of position
+//line at centre, error 1* the posotion of error, show =ve value or -ve value
+//an array of ir sensor, very details, kp is less compare to IR //sensitive maa 
+

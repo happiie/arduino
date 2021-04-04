@@ -1,0 +1,234 @@
+#include <MotorControl.h>
+#include <LineScanCamera.h>
+#include <LiquidCrystal.h>
+
+MotorControl motorleft(2,3,0,'H');
+MotorControl motorright(12,11,1,'H');
+LineScanCamera myCam1(A1,A2,A3,7390);
+LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
+
+int sen1=A1, sen2=A2, sen3=A3, sen4=A4, sen5=A5;
+int s1=0, s2=0, s3=0, s4=0, s5=0;
+int sleft=0,sright=0;
+int lcd_light=10;
+float c=0;
+float mostleft,mostright;
+float center,prev_c=0;
+int lcd_key     = 0;
+int adc_key_in  = 0;
+
+#define btnRIGHT  0
+#define btnUP     1
+#define btnDOWN   2
+#define btnLEFT   3
+#define btnSELECT 4
+#define btnNONE   5
+
+int button=0;
+int os_value=0;
+int a=0;
+int allblack=0;
+int clik = 0;
+int mode=0;
+float speed_factor=1;
+int cross_delay=400;
+int basespeed=120; //
+int fast_speed=basespeed*2;
+int left=0,right=0;
+float error=0;
+float Kp=6.0,Kd=2.2,Ki=0.007; //Kp=4,Kd=2,Ki=0.005;
+int nov=0;
+float last_c=0;
+float derivative=0;
+float integral=0;
+float last_val=0;
+float val=0;
+int n=0;
+int* value;
+int digitizedvalue[128];
+int thres=100;
+int start_stat=0;
+
+void lsc()
+{
+    last_val=val;
+    val=0;
+    n=0;
+    value=myCam1.read();
+    for (int j = 35; j < 93; j++) // for (int j = 30; j < 98; j++)
+    {
+      if (value[j]<thres) 
+      {
+        digitizedvalue[j]=0;
+      }
+      else 
+      {
+        digitizedvalue[j]=1;
+        val=val+j;
+        n++;
+      }
+    }
+    if (n>10)//if got whiteline   //n>7
+    {
+        val=val/n;
+        val=val-61; //change camera center of robot
+        
+        if ((n>30)&&((val>-2)&&(val<2))) //sense all white
+        {
+              motorleft.speed(0);
+              motorright.speed(0);
+              delay(800);
+              motorleft.speed(70);
+              motorright.speed(70);
+              delay(1000);
+              motorleft.speed(0);
+              motorright.speed(0);
+              delay(500);  
+          }
+        
+        integral += val;
+        
+        if(integral > 255)
+        {
+          integral=255;
+        }
+    
+        if(integral < -255)
+        {
+          integral=-255;
+        }
+    
+        derivative=val-last_val;
+        
+        if (val>2)
+        {
+          right++;
+          left=0;
+       
+          if (right==3)
+          { 
+            os_value=1;
+          }
+        }
+        else if (val<-2)
+        {
+          right=0;
+          left++; 
+          if (left==3)
+          {
+            os_value=2;
+          }
+        }
+        else
+        {
+          right=0;
+          left=0; 
+        }
+        
+        error=val*Kp+integral*Ki+derivative*Kd;
+        motorleft.speed(basespeed-error);
+        motorright.speed(basespeed+error);
+    }
+    
+    else //all white
+    {
+      overshoot();
+    }
+    Serial.print(val);
+    Serial.print("\n\r");
+}
+
+int read_LCD_buttons()
+{
+ adc_key_in = analogRead(0);      // read the value from the sensor 
+ // my buttons when read are centered at these valies: 0, 144, 329, 504, 741
+ // we add approx 50 to those values and check to see if we are close
+ if (adc_key_in > 1000) return btnNONE; // We make this the 1st option for speed reasons since it will be the most likely result
+ // For V1.1 us this threshold
+
+ if (adc_key_in < 50)   return btnRIGHT;  
+ if (adc_key_in < 195)  return btnUP; 
+ if (adc_key_in < 380)  return btnDOWN; 
+ if (adc_key_in < 555)  return btnLEFT; 
+ if (adc_key_in < 790)  return btnSELECT;   
+ return btnNONE;  // when all others fail, return this...
+}
+
+void overshoot ()
+{  
+  if (os_value==1)
+          {
+            motorleft.speed(-50);   //-45
+            motorright.speed(55);   //55
+          }
+    else if (os_value==2)
+          {
+            motorleft.speed(55);    //50
+            motorright.speed(-50);   //-40
+          }
+    else 
+          {
+            motorleft.speed(50);   //70
+            motorright.speed(50);  //70
+          }
+}
+
+void module_one()
+{     
+     while(1)
+     { 
+     basespeed=60;
+     if (c<0||c>0)
+     {
+     while(1)
+     {
+                 motorleft.speed(basespeed-error);
+                 motorright.speed(basespeed+error);
+                 lcd.setCursor(0,1);
+       lcd.print(error);
+            
+     }
+     }
+     }
+      
+}
+
+void waitmode()
+{
+   while (mode==0)
+   {
+     lcd_key = read_LCD_buttons(); 
+     switch (lcd_key)               // depending on which button was pushed, we perform an action
+     {
+     case btnSELECT:
+      {
+       mode=1;
+       motorleft.speed(70);
+       motorright.speed(70);
+       delay(1400);
+       break;
+       }
+     }
+   }
+}
+
+void setup(){
+  Serial.begin(9600);
+  lcd.begin(16, 2);              // start the library
+  lcd.setCursor(0,0);
+  lcd.print("Robotedu.my"); // print a simple message
+  lcd.setCursor(0,1);
+  lcd.print("APROC 2016");
+  waitmode();
+     
+}
+
+void loop() 
+{
+  lsc();
+  lcd.setCursor(0,1);
+  lcd.print("                ");
+  lcd.setCursor(0,1);
+  lcd.print(val);
+
+}

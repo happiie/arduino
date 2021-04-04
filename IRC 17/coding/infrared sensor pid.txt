@@ -1,0 +1,151 @@
+#include <MotorControl.h> //motor control library
+
+
+MotorControl motorleft(4,5,1,'H'); // Declare Motor Pin
+MotorControl motorright(7,6,0,'H'); //Declare Motor Pin
+
+
+int sen1=8, sen2=9, sen3=10, sen4=11, sen5=12; //Set Sensor Pin
+int S1=0, S2=0, s3=0, s4=0, s5=0;
+float c=0;
+float center,prev_c=0;
+int os_value=0;
+int basespeed=60;
+int left=0,right=0;
+float error=0;
+float Kp=40,Kd=30,Ki=0.005;
+int nov=0;
+float last_c=0;
+float derivative=0;
+float integral=0;
+
+void overshoot () //Avoid Robot Overshoot Programme
+{
+  
+  if (os_value==1)
+          {
+            motorleft.speed(-200);
+            motorright.speed(15);
+            
+            
+          }
+    else if (os_value==2)
+          {
+            motorleft.speed(150);
+            motorright.speed(-200);
+           
+            
+          }
+    else 
+          {
+            motorleft.speed(150);
+            motorright.speed(150);
+             
+          }
+}
+
+int sense() //Sense Line Function 
+{
+  last_c=c;
+  nov=0;
+  S1 = digitalRead(sen1); //Read Sensor 1
+  if (S1==HIGH)
+  {nov++;}
+  /*
+  if (S1)
+  {S1=0;}
+  else {S1=1; nov++;}
+  */
+  S2 = digitalRead(sen2); // Read Sensor 2
+  if (S2==HIGH)
+  {nov++;}
+  /*
+  if (S2)
+  {S2=0;}
+  else {S2=1;nov++;}
+  */
+  s3 = digitalRead(sen3); // Read Sensor 3
+  if (s3==HIGH)
+  {nov++;}
+  /*
+  if (s3)
+  {s3=0;}
+  else {s3=1;nov++;}
+  */
+  s4 = digitalRead(sen4); // Read Sensor 4
+  if (s4==HIGH)
+  {nov++;}
+  /*
+  if (s4)
+  {s4=0;}
+  else {s4=1;nov++;}
+  */
+  s5 = digitalRead(sen5); // Read Sensor 5
+  if (s5==HIGH)
+  {nov++;}
+  /*
+  if (s5)
+  {s5=0;}
+  else {s5=1;nov++;}
+  */
+  
+ 
+  if (nov>0)
+  {
+    c=(((S1*1)+(S2*3)+(s3*5)+(s4*7)+(s5*9))/nov)-4;
+    integral += c;
+    if(integral > 255)
+    {integral=255;}
+    
+    if(integral < -255)
+    {integral=-255;}
+    
+    derivative=c-last_c;
+
+  if (c>0)
+  {
+    os_value=1;
+    left++;
+    right=0;
+  }
+  else if (c<0)
+  {
+    os_value=2;
+    right++;
+    left=0;
+  }
+  else 
+  {
+    os_value=0;
+    left=0;
+    right=0;
+  }
+  if (nov==0)
+  {
+    overshoot ();
+    error=0;
+  }
+  
+  else {error=c*Kp+integral*Ki+derivative*Kd;}
+
+  
+  }
+  
+}
+
+void setup() {
+  // put your setup code here, to run once:
+  pinMode(sen1,INPUT);
+  pinMode(sen2,INPUT);
+  pinMode(sen3,INPUT);
+  pinMode(sen4,INPUT);
+  pinMode(sen5,INPUT);
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+
+              sense();  
+              motorleft.speed(basespeed-error);
+              motorright.speed(basespeed+error);
+}

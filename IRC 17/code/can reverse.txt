@@ -1,0 +1,186 @@
+/*
+LineScanCamera display digitized reading to serial
+
+The methods are: 
+ LineScanCamera - Class for manipulating LineScanCamera connected to Arduino pins. 
+ LineScanCamera anyname (SIpin, CLKpin, ANpin, Exposetime in us)
+ read()      - Gets the analog value of each pixel. return int*
+*/
+
+#include <MotorControl.h>
+#include <LineScanCamera.h>
+
+MotorControl motor1(6,9,1,'H');
+MotorControl motor2(3,5,1,'H');
+LineScanCamera myCam1(A0,A2,A1,7390);
+
+int* value;
+int digitizedvalue[128];
+int black[128];
+int threshold=70;
+//depends on the ambient light, above this value, means it will be white
+//if black very less or zero, mean light intensity of black already above threshold level,
+//so increase the threshold level
+
+double kp=1.2;
+double kd=0;
+double ki=0;
+
+double p=0;
+double d=0;
+double i=0;
+
+double pid=0;
+
+double error=0;
+double prev_e=0;
+
+int basespeed1=100;
+int basespeed2=107;
+
+double finalspeed1;
+double finalspeed2;
+
+void setup()
+{
+    pinMode(2,OUTPUT);
+    Serial.begin(9600);
+    
+    //assign a coeficient for each sensor
+    for(int k=-44;k<=44;k++)
+    {
+      black[k+64]=k;  //change sensor value from -53 to 54
+    }
+}
+
+void cameraRead()
+{   
+    value=myCam1.read();
+
+    //digitize the data based on threshold
+    for(int j=20;j<108;j++)
+    {
+      if(value[j]<threshold)
+      {
+        digitizedvalue[j]=1;  //1=black
+      }
+      
+      else
+      {
+        digitizedvalue[j]=0;  //0=white
+      }
+    }
+
+    //display the digitized data on serial monitor
+    for(int j=20;j<=108;j++)
+    {
+      Serial.print(digitizedvalue[j]);
+    }
+    Serial.print("\n");
+}
+
+void calculateError()
+{  
+    int detectBlack=0;
+    int blackStart=0;
+    int blackNumber=0;
+    int blackTotal=0;
+
+    //detect the posotion where 1 / black start occur
+    for(int j=20;j<=108;j++) 
+    {     
+      detectBlack+=digitizedvalue[j];
+      blackStart=j;
+      if(detectBlack>=1)  //if sense black, blackvalue>=1, break the loop
+      {
+         break;
+      }
+    }
+    
+    //calculate length of 1 / black
+    for(int j=blackStart;j<=108;j++)
+    {     
+      if(j+digitizedvalue[j]==j)  //if sense white, j+0=j, break the loop
+      {
+         break;
+      }
+      blackNumber++;
+    }
+
+    //calculate total of 1 / black
+    for(int j=20;j<=108;j++)
+    {
+      blackTotal+=digitizedvalue[j]*black[j];
+    }
+
+    error=blackTotal/blackNumber;
+
+    Serial.print(error);
+    //Serial.print("\n");
+}
+
+void calculatePid()
+{
+    p=error;  //current error
+    d=error-prev_e;  //current error - previous error
+    i+=error;  //cumulative error
+
+    //pid formula
+    pid=(kp*p)+(kd*d)+(ki*i);
+
+    prev_e=error;
+}
+  
+void runMotor()
+{
+    //pid on left = -ve
+    //pid on right = +ve
+    finalspeed1=basespeed1+pid; //speed of motor1 (left)
+    finalspeed2=basespeed2-pid; //speed of motor2 (right)
+
+    //limit the speed of motor, motor speed maximum can reach until 255 only
+    if(finalspeed1>255)
+    {
+      finalspeed1=255;
+    }
+
+    if(finalspeed1<-255)
+    {
+      finalspeed1=-255;
+    }
+    
+    if(finalspeed2>255)
+    {
+      finalspeed2=255;
+    }
+
+    if(finalspeed2<-255)
+    {
+      finalspeed2=-255;
+    }
+    
+    if(error==-1)
+    {
+      finalspeed1=-50;
+      finalspeed2=-57;
+    }    
+    motor1.speed(finalspeed1);
+    motor2.speed(finalspeed2);
+}
+
+void loop()
+{
+    digitalWrite(2,LOW);
+    cameraRead();
+    calculateError();
+    calculatePid();
+    runMotor();
+    delay(10);
+    Serial.println(pid);
+    Serial.println(finalspeed1);
+    Serial.println(finalspeed2);
+}
+
+//camera's sensors is actually an array of sensors,
+//since the number of sensors is too many, so the values it get very details and error return very big
+//so kp for camera should very small compare to IR sensor
